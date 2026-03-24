@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Catalog — Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --sidebar: #0c1222;
+      --sidebar-border: #1e293b;
+      --surface: #ffffff;
+      --canvas: #f1f5f9;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --accent: #ea580c;
+      --accent-hover: #c2410c;
+      --accent-soft: rgba(234, 88, 12, 0.1);
+      --danger: #dc2626;
+      --danger-soft: rgba(220, 38, 38, 0.1);
+      --success: #059669;
+      --shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+      --shadow-lg: 0 10px 40px -10px rgba(15, 23, 42, 0.15);
+      --radius: 10px;
+      --font: "DM Sans", system-ui, sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--text);
+      background: var(--canvas);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* —— Login —— */
+    .login-wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background:
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(234, 88, 12, 0.15), transparent),
+        linear-gradient(180deg, #0c1222 0%, #1e293b 100%);
+    }
+    .login-card {
+      width: 100%;
+      max-width: 400px;
+      background: var(--surface);
+      border-radius: 16px;
+      padding: 40px 36px;
+      box-shadow: var(--shadow-lg);
+    }
+    .login-card h1 {
+      margin: 0 0 8px;
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .login-card .lead {
+      margin: 0 0 28px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .login-card label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .login-card input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font: inherit;
+      margin-bottom: 16px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .login-card input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 11px 18px;
+      border-radius: 8px;
+      font: inherit;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .btn-primary {
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      margin-top: 8px;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: #f8fafc; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+    }
+    .btn-ghost:hover { color: var(--text); background: rgba(0,0,0,0.04); }
+    .btn-danger {
+      background: var(--danger);
+      color: #fff;
+    }
+    .btn-danger:hover { filter: brightness(0.95); }
+    .btn-sm { padding: 7px 12px; font-size: 0.8rem; }
+    .btn-icon { padding: 8px 10px; }
+
+    .msg { min-height: 1.25em; margin-top: 14px; font-size: 0.875rem; }
+    .msg.err { color: var(--danger); }
+    .msg.ok { color: var(--success); }
+
+    .hidden { display: none !important; }
+
+    /* —— App shell —— */
+    .app {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
+    @media (max-width: 900px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { position: sticky; top: 0; z-index: 40; }
+    }
+
+    .sidebar {
+      background: var(--sidebar);
+      color: #e2e8f8;
+      padding: 24px 0;
+      border-right: 1px solid var(--sidebar-border);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    .sidebar-brand {
+      padding: 0 24px 28px;
+      border-bottom: 1px solid var(--sidebar-border);
+    }
+    .sidebar-brand .logo {
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: -0.03em;
+      color: #fff;
+    }
+    .sidebar-brand .tag {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+    .nav {
+      padding: 20px 12px;
+      flex: 1;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      color: #94a3b8;
+      font-weight: 500;
+      font-size: 0.9rem;
+      cursor: default;
+    }
+    .nav-item.active {
+      background: rgba(234, 88, 12, 0.15);
+      color: #fdba74;
+    }
+    .sidebar-foot {
+      padding: 16px 24px;
+      margin-top: auto;
+      border-top: 1px solid var(--sidebar-border);
+    }
+    .sidebar-foot .btn { width: 100%; }
+
+    .main {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .main-header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 28px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .main-header h2 {
+      margin: 0;
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .main-header p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .main-body { padding: 24px 28px 40px; flex: 1; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      box-shadow: var(--shadow);
+    }
+    .stat-card .label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    .stat-card .value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-top: 6px;
+      letter-spacing: -0.02em;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .search {
+      flex: 1;
+      min-width: 200px;
+      position: relative;
+    }
+    .search input {
+      width: 100%;
+      padding: 10px 14px 10px 38px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font: inherit;
+      background: var(--surface);
+    }
+    .search input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .search::before {
+      content: "";
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      opacity: 0.4;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'/%3E%3C/svg%3E") center/contain no-repeat;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    th {
+      text-align: left;
+      padding: 14px 16px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      background: #f8fafc;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tbody tr { transition: background 0.12s; }
+    tbody tr:hover { background: #fafbfc; }
+
+    .thumb {
+      width: 52px;
+      height: 52px;
+      border-radius: 8px;
+      object-fit: cover;
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+    }
+    .title-cell {
+      font-weight: 600;
+      max-width: 280px;
+      line-height: 1.35;
+    }
+    .price-cell { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .mono {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .empty {
+      text-align: center;
+      padding: 56px 24px;
+      color: var(--muted);
+    }
+    .empty strong { display: block; color: var(--text); font-size: 1.05rem; margin-bottom: 8px; }
+
+    /* —— Modal —— */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s, visibility 0.2s;
+    }
+    .overlay.open {
+      opacity: 1;
+      visibility: visible;
+    }
+    .modal {
+      background: var(--surface);
+      border-radius: 14px;
+      width: 100%;
+      max-width: 520px;
+      max-height: 90vh;
+      overflow: auto;
+      box-shadow: var(--shadow-lg);
+      transform: translateY(8px);
+      transition: transform 0.2s;
+    }
+    .overlay.open .modal { transform: translateY(0); }
+    .modal-head {
+      padding: 22px 24px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .modal-head h3 {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+    .modal-body { padding: 20px 24px 24px; }
+    .modal-body label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 6px;
+      margin-top: 14px;
+    }
+    .modal-body label:first-of-type { margin-top: 0; }
+    .modal-body input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font: inherit;
+    }
+    .modal-body input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .modal-foot {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+      background: #fafbfc;
+    }
+
+    .toast-wrap {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+    .toast {
+      pointer-events: auto;
+      padding: 12px 18px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      box-shadow: var(--shadow-lg);
+      animation: toastIn 0.25s ease;
+    }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(12px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .toast.ok { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+    .toast.err { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+  </style>
+</head>
+<body>
+  <div id="screen-login" class="login-wrap">
+    <div class="login-card">
+      <h1>Catalog admin</h1>
+      <p class="lead">Sign in to manage affiliate products and tracking links.</p>
+      <form id="login-form">
+        <label for="login-user">Username</label>
+        <input type="text" id="login-user" autocomplete="username" required />
+        <label for="login-pass">Password</label>
+        <input type="password" id="login-pass" autocomplete="current-password" required />
+        <button type="submit" class="btn btn-primary">Sign in</button>
+        <p id="login-msg" class="msg"></p>
+      </form>
+    </div>
+  </div>
+
+  <div id="screen-app" class="app hidden">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo">Morocco Deals</div>
+        <div class="tag">Affiliate catalog</div>
+      </div>
+      <nav class="nav">
+        <div class="nav-item active">
+          <span aria-hidden="true">◆</span> Products
+        </div>
+      </nav>
+      <div class="sidebar-foot">
+        <button type="button" class="btn btn-ghost" id="btn-logout">Log out</button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="main-header">
+        <div>
+          <h2>Products</h2>
+          <p>Create, edit, and remove listings. Affiliate links are stored exactly as you paste them.</p>
+        </div>
+        <button type="button" class="btn btn-primary" id="btn-add">+ Add product</button>
+      </header>
+
+      <div class="main-body">
+        <div class="stats">
+          <div class="stat-card">
+            <div class="label">Total products</div>
+            <div class="value" id="stat-total">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Showing</div>
+            <div class="value" id="stat-filtered">0</div>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="search">
+            <input type="search" id="search" placeholder="Search by title…" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="panel">
+          <div id="empty-state" class="empty hidden">
+            <strong>No products yet</strong>
+            Add your first affiliate link with the button above.
+          </div>
+          <div id="table-wrap" class="table-wrap hidden">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Product</th>
+                  <th>Price</th>
+                  <th>Affiliate link</th>
+                  <th>ID</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product modal -->
+  <div id="overlay-product" class="overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-labelledby="modal-title">
+      <div class="modal-head">
+        <h3 id="modal-title">Add product</h3>
+        <button type="button" class="btn btn-ghost btn-icon" id="modal-close" aria-label="Close">✕</button>
+      </div>
+      <form id="product-form">
+        <div class="modal-body">
+          <label for="f-affiliate">Affiliate link</label>
+          <input type="url" id="f-affiliate" required placeholder="https://s.click.aliexpress.com/..." />
+          <label for="f-title">Title</label>
+          <input type="text" id="f-title" required />
+          <label for="f-image">Image URL</label>
+          <input type="url" id="f-image" required placeholder="https://..." />
+          <label for="f-price">Price</label>
+          <input type="text" id="f-price" required placeholder="29.99" />
+          <label for="f-currency">Currency</label>
+          <input type="text" id="f-currency" value="MAD" maxlength="8" />
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" id="modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="modal-save">Save product</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete confirm -->
+  <div id="overlay-delete" class="overlay" aria-hidden="true">
+    <div class="modal" style="max-width: 420px;">
+      <div class="modal-head">
+        <h3>Delete product?</h3>
+        <button type="button" class="btn btn-ghost btn-icon" id="delete-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin:0; color: var(--muted);">This cannot be undone. The listing will be removed from the catalog.</p>
+        <p id="delete-title" style="margin: 12px 0 0; font-weight: 600; color: var(--text);"></p>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-secondary" id="delete-cancel">Cancel</button>
+        <button type="button" class="btn btn-danger" id="delete-confirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-wrap" id="toasts"></div>
+
+  <script>
+    const base = "";
+    const fetchOpts = { credentials: "include" };
+
+    let products = [];
+    let editingId = null;
+    let deleteTargetId = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    function toast(msg, type) {
+      const w = $("toasts");
+      const t = document.createElement("div");
+      t.className = "toast " + (type === "err" ? "err" : "ok");
+      t.textContent = msg;
+      w.appendChild(t);
+      setTimeout(() => {
+        t.style.opacity = "0";
+        t.style.transition = "opacity 0.3s";
+        setTimeout(() => t.remove(), 300);
+      }, 3800);
+    }
+
+    function showLogin() {
+      $("screen-login").classList.remove("hidden");
+      $("screen-app").classList.add("hidden");
+    }
+    function showApp() {
+      $("screen-login").classList.add("hidden");
+      $("screen-app").classList.remove("hidden");
+    }
+
+    function filteredProducts() {
+      const q = $("search").value.trim().toLowerCase();
+      if (!q) return products.slice();
+      return products.filter((p) => p.title.toLowerCase().includes(q));
+    }
+
+    function render() {
+      const list = filteredProducts();
+      $("stat-total").textContent = String(products.length);
+      $("stat-filtered").textContent = String(list.length);
+
+      const empty = $("empty-state");
+      const wrap = $("table-wrap");
+      const tbody = $("tbody");
+
+      if (products.length === 0) {
+        empty.classList.remove("hidden");
+        wrap.classList.add("hidden");
+        tbody.innerHTML = "";
+        return;
+      }
+      empty.classList.add("hidden");
+      wrap.classList.remove("hidden");
+
+      if (list.length === 0) {
+        tbody.innerHTML =
+          '<tr><td colspan="6" class="empty" style="border:none;padding:40px;">No matches for your search.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list
+        .map((p) => {
+          const safeTitle = escapeHtml(p.title);
+          const safeLink = escapeHtml(p.affiliate_link);
+          const shortLink =
+            p.affiliate_link.length > 42
+              ? p.affiliate_link.slice(0, 40) + "…"
+              : p.affiliate_link;
+          const pid = p.product_id ? escapeHtml(p.product_id) : "—";
+          const img = p.image
+            ? `<img class="thumb" src="${escapeAttr(p.image)}" alt="" loading="lazy" onerror="this.style.opacity=0.3" />`
+            : '<div class="thumb"></div>';
+          return `<tr data-id="${escapeAttr(p.id)}">
+            <td>${img}</td>
+            <td class="title-cell">${safeTitle}</td>
+            <td class="price-cell">${escapeHtml(p.price)} ${escapeHtml(p.currency || "")}</td>
+            <td><span class="mono" title="${safeLink}">${escapeHtml(shortLink)}</span></td>
+            <td><span class="mono">${pid}</span></td>
+            <td class="actions">
+              <button type="button" class="btn btn-secondary btn-sm btn-edit" data-id="${escapeAttr(p.id)}">Edit</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-delete" data-id="${escapeAttr(p.id)}" style="border-color:#fecaca;color:#b91c1c;background:#fff5f5;">Delete</button>
+            </td>
+          </tr>`;
+        })
+        .join("");
+
+      tbody.querySelectorAll(".btn-edit").forEach((btn) => {
+        btn.addEventListener("click", () => openEdit(btn.getAttribute("data-id")));
+      });
+      tbody.querySelectorAll(".btn-delete").forEach((btn) => {
+        btn.addEventListener("click", () => openDelete(btn.getAttribute("data-id")));
+      });
+    }
+
+    function escapeHtml(s) {
+      const d = document.createElement("div");
+      d.textContent = s;
+      return d.innerHTML;
+    }
+    function escapeAttr(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    async function loadProducts() {
+      try {
+        const res = await fetch(base + "/admin/products", fetchOpts);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (res.status === 401) showLogin();
+          throw new Error(data.error || res.statusText);
+        }
+        products = data.products || [];
+        products.sort(
+          (a, b) =>
+            new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+        );
+        render();
+      } catch (e) {
+        toast(e.message || String(e), "err");
+      }
+    }
+
+    function openCreate() {
+      editingId = null;
+      $("modal-title").textContent = "Add product";
+      $("modal-save").textContent = "Create product";
+      $("f-affiliate").value = "";
+      $("f-title").value = "";
+      $("f-image").value = "";
+      $("f-price").value = "";
+      $("f-currency").value = "MAD";
+      $("overlay-product").classList.add("open");
+      $("overlay-product").setAttribute("aria-hidden", "false");
+    }
+
+    function openEdit(id) {
+      const p = products.find((x) => x.id === id);
+      if (!p) return;
+      editingId = id;
+      $("modal-title").textContent = "Edit product";
+      $("modal-save").textContent = "Save changes";
+      $("f-affiliate").value = p.affiliate_link;
+      $("f-title").value = p.title;
+      $("f-image").value = p.image;
+      $("f-price").value = p.price;
+      $("f-currency").value = p.currency || "MAD";
+      $("overlay-product").classList.add("open");
+      $("overlay-product").setAttribute("aria-hidden", "false");
+    }
+
+    function closeProductModal() {
+      $("overlay-product").classList.remove("open");
+      $("overlay-product").setAttribute("aria-hidden", "true");
+      editingId = null;
+    }
+
+    function openDelete(id) {
+      const p = products.find((x) => x.id === id);
+      if (!p) return;
+      deleteTargetId = id;
+      $("delete-title").textContent = p.title;
+      $("overlay-delete").classList.add("open");
+      $("overlay-delete").setAttribute("aria-hidden", "false");
+    }
+
+    function closeDeleteModal() {
+      deleteTargetId = null;
+      $("overlay-delete").classList.remove("open");
+      $("overlay-delete").setAttribute("aria-hidden", "true");
+    }
+
+    $("login-user").value = "admin";
+
+    $("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const msg = $("login-msg");
+      msg.textContent = "";
+      msg.className = "msg";
+      try {
+        const res = await fetch(base + "/admin/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: $("login-user").value.trim(),
+            password: $("login-pass").value,
+          }),
+          ...fetchOpts,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        $("login-pass").value = "";
+        showApp();
+        await loadProducts();
+        toast("Welcome back", "ok");
+      } catch (err) {
+        msg.textContent = err.message || String(err);
+        msg.className = "msg err";
+      }
+    });
+
+    $("btn-logout").addEventListener("click", async () => {
+      try {
+        await fetch(base + "/admin/logout", { method: "POST", ...fetchOpts });
+      } catch (_) {}
+      showLogin();
+      toast("Signed out", "ok");
+    });
+
+    $("btn-add").addEventListener("click", openCreate);
+    $("modal-close").addEventListener("click", closeProductModal);
+    $("modal-cancel").addEventListener("click", closeProductModal);
+    $("overlay-product").addEventListener("click", (e) => {
+      if (e.target === $("overlay-product")) closeProductModal();
+    });
+
+    $("product-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const body = {
+        affiliateLink: $("f-affiliate").value.trim(),
+        title: $("f-title").value.trim(),
+        image: $("f-image").value.trim(),
+        price: $("f-price").value.trim(),
+        currency: $("f-currency").value.trim() || "MAD",
+      };
+      try {
+        const url =
+          editingId == null
+            ? base + "/admin/products"
+            : base + "/admin/products/" + encodeURIComponent(editingId);
+        const res = await fetch(url, {
+          method: editingId == null ? "POST" : "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          ...fetchOpts,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (res.status === 401) showLogin();
+          throw new Error(data.error || res.statusText);
+        }
+        closeProductModal();
+        toast(editingId ? "Product updated" : "Product created", "ok");
+        await loadProducts();
+      } catch (err) {
+        toast(err.message || String(err), "err");
+      }
+    });
+
+    $("delete-close").addEventListener("click", closeDeleteModal);
+    $("delete-cancel").addEventListener("click", closeDeleteModal);
+    $("overlay-delete").addEventListener("click", (e) => {
+      if (e.target === $("overlay-delete")) closeDeleteModal();
+    });
+
+    $("delete-confirm").addEventListener("click", async () => {
+      if (!deleteTargetId) return;
+      const id = deleteTargetId;
+      try {
+        const res = await fetch(
+          base + "/admin/products/" + encodeURIComponent(id),
+          { method: "DELETE", ...fetchOpts }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (res.status === 401) showLogin();
+          throw new Error(data.error || res.statusText);
+        }
+        closeDeleteModal();
+        toast("Product deleted", "ok");
+        await loadProducts();
+      } catch (err) {
+        toast(err.message || String(err), "err");
+      }
+    });
+
+    $("search").addEventListener("input", render);
+
+    async function checkSession() {
+      try {
+        const res = await fetch(base + "/admin/session", fetchOpts);
+        const data = await res.json();
+        if (data.loggedIn) {
+          showApp();
+          await loadProducts();
+        } else {
+          showLogin();
+        }
+      } catch {
+        showLogin();
+      }
+    }
+
+    checkSession();
+  </script>
+</body>
+</html>
