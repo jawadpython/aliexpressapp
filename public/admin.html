@@ -264,6 +264,7 @@
       flex-wrap: wrap;
       gap: 12px;
       align-items: center;
+      justify-content: space-between;
       margin-bottom: 16px;
     }
     .search {
@@ -302,11 +303,36 @@
       border-radius: 12px;
       box-shadow: var(--shadow);
       overflow: hidden;
-      transition: opacity 0.18s ease;
+      position: relative;
     }
-    .panel.refreshing {
-      opacity: 0.65;
+    .panel.panel--busy::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.35);
       pointer-events: none;
+      z-index: 2;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .list-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      min-height: 20px;
+    }
+    .list-status .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+      flex-shrink: 0;
     }
 
     .table-wrap { overflow-x: auto; }
@@ -543,6 +569,7 @@
           <div class="search">
             <input type="search" id="search" placeholder="Search by title…" autocomplete="off" />
           </div>
+          <div id="list-status" class="list-status" aria-live="polite"></div>
         </div>
 
         <div class="panel" id="catalog-panel">
@@ -587,7 +614,7 @@
         </div>
         <div class="modal-foot">
           <button type="button" class="btn btn-secondary" id="modal-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="modal-save">Save product</button>
+          <button type="submit" class="btn btn-primary" id="modal-save" style="width: auto; min-width: 120px">Save product</button>
         </div>
       </form>
     </div>
@@ -620,6 +647,11 @@
     let products = [];
     let editingId = null;
     let deleteTargetId = null;
+    /** Prevents out-of-order refresh responses from corrupting the list */
+    let loadGeneration = 0;
+    let productFormSubmitting = false;
+    let deleteSubmitting = false;
+    let searchDebounceTimer = null;
 
     const $ = (id) => document.getElementById(id);
 
@@ -713,13 +745,12 @@
         .map((p) => {
           const safeTitle = escapeHtml(p.title);
           const safeLink = escapeHtml(p.affiliate_link);
+          const al = String(p.affiliate_link || "");
           const shortLink =
-            p.affiliate_link.length > 42
-              ? p.affiliate_link.slice(0, 40) + "…"
-              : p.affiliate_link;
+            al.length > 42 ? al.slice(0, 40) + "…" : al;
           const pid = p.product_id ? escapeHtml(p.product_id) : "—";
           const img = p.image
-            ? `<img class="thumb" src="${escapeAttr(p.image)}" alt="" loading="lazy" onerror="this.style.opacity=0.3" />`
+            ? `<img class="thumb" src="${escapeAttr(p.image)}" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.3" />`
             : '<div class="thumb"></div>';
           return `<tr data-id="${escapeAttr(p.id)}">
             <td>${img}</td>
@@ -733,13 +764,6 @@
           </tr>`;
         })
         .join("");
-
-      tbody.querySelectorAll(".btn-edit").forEach((btn) => {
-        btn.addEventListener("click", () => openEdit(btn.getAttribute("data-id")));
-      });
-      tbody.querySelectorAll(".btn-delete").forEach((btn) => {
-        btn.addEventListener("click", () => openDelete(btn.getAttribute("data-id")));
-      });
     }
 
     function escapeHtml(s) {
@@ -763,40 +787,60 @@
       );
     }
 
+    function setListLoading(on, label) {
+      const status = $("list-status");
+      const panel = $("catalog-panel");
+      if (!status || !panel) return;
+      if (on) {
+        const lab = document.createElement("span");
+        lab.textContent = label || "Loading…";
+        status.textContent = "";
+        const spin = document.createElement("span");
+        spin.className = "spinner";
+        spin.setAttribute("aria-hidden", "true");
+        status.appendChild(spin);
+        status.appendChild(lab);
+        panel.classList.add("panel--busy");
+      } else {
+        status.textContent = "";
+        panel.classList.remove("panel--busy");
+      }
+    }
+
     /**
-     * Reload catalog from server (cache-busted so new items always appear after CRUD).
-     * @param {{ quiet?: boolean, silentErrors?: boolean }} opts — quiet: no dimming; silentErrors: no toast (after successful local update)
+     * @param {{ showLoading?: boolean }} opts — showLoading: spinner + light overlay (initial load / login). Off after saves for a snappier UI.
      */
     async function refreshProducts(opts) {
-      const quiet = opts && opts.quiet;
-      const silentErrors = opts && opts.silentErrors;
-      const panel = $("catalog-panel");
-      if (!quiet && panel) panel.classList.add("refreshing");
+      const showLoading = opts && opts.showLoading === true;
+      const gen = ++loadGeneration;
+      if (showLoading) setListLoading(true, "Loading catalog…");
       try {
         const res = await fetch(
           base + "/admin/products?_=" + encodeURIComponent(String(Date.now())),
-          fetchOpts
+          { ...fetchOpts, cache: "no-store" }
         );
+        if (gen !== loadGeneration) return;
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           if (res.status === 401) {
             showLogin();
             return;
           }
-          throw new Error(data.error || res.statusText);
+          throw new Error(data.error || res.statusText || "Failed to load products");
         }
+        if (gen !== loadGeneration) return;
         products = Array.isArray(data.products) ? data.products : [];
         sortProductsNewestFirst();
         render();
       } catch (e) {
-        if (!silentErrors) toast(e.message || String(e), "err");
+        if (gen === loadGeneration) toast(e.message || String(e), "err");
       } finally {
-        if (panel) panel.classList.remove("refreshing");
+        if (gen === loadGeneration && showLoading) setListLoading(false);
       }
     }
 
     async function loadProducts() {
-      await refreshProducts();
+      await refreshProducts({ showLoading: true });
     }
 
     function openCreate() {
@@ -823,7 +867,8 @@
       $("overlay-product").setAttribute("aria-hidden", "false");
     }
 
-    function closeProductModal() {
+    function closeProductModal(force) {
+      if (!force && productFormSubmitting) return;
       $("overlay-product").classList.remove("open");
       $("overlay-product").setAttribute("aria-hidden", "true");
       editingId = null;
@@ -839,6 +884,13 @@
     }
 
     function closeDeleteModal() {
+      if (deleteSubmitting) return;
+      deleteTargetId = null;
+      $("overlay-delete").classList.remove("open");
+      $("overlay-delete").setAttribute("aria-hidden", "true");
+    }
+
+    function closeDeleteModalForce() {
       deleteTargetId = null;
       $("overlay-delete").classList.remove("open");
       $("overlay-delete").setAttribute("aria-hidden", "true");
@@ -910,9 +962,34 @@
       if (e.target === $("overlay-product")) closeProductModal();
     });
 
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if ($("overlay-product").classList.contains("open") && !productFormSubmitting) {
+        closeProductModal();
+      }
+      if ($("overlay-delete").classList.contains("open") && !deleteSubmitting) {
+        closeDeleteModal();
+      }
+    });
+
+    $("table-wrap").addEventListener("click", (e) => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      const edit = t.closest(".btn-edit");
+      if (edit) {
+        openEdit(edit.getAttribute("data-id"));
+        return;
+      }
+      const del = t.closest(".btn-delete");
+      if (del) openDelete(del.getAttribute("data-id"));
+    });
+
     $("product-form").addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (productFormSubmitting) return;
       const saveBtn = $("modal-save");
+      const cancelBtn = $("modal-cancel");
+      const closeBtn = $("modal-close");
       const wasEditing = editingId != null;
       const currentEditId = editingId;
       const body = {
@@ -921,10 +998,13 @@
         image: $("f-image").value.trim(),
       };
       const prevBtnText = saveBtn ? saveBtn.textContent : "";
+      productFormSubmitting = true;
       if (saveBtn) {
         saveBtn.disabled = true;
         saveBtn.textContent = wasEditing ? "Saving…" : "Creating…";
       }
+      if (cancelBtn) cancelBtn.disabled = true;
+      if (closeBtn) closeBtn.disabled = true;
       try {
         const url =
           currentEditId == null
@@ -934,6 +1014,7 @@
           method: currentEditId == null ? "POST" : "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
+          cache: "no-store",
           ...fetchOpts,
         });
         const data = await res.json().catch(() => ({}));
@@ -943,27 +1024,19 @@
             data.error || res.statusText || "Request failed"
           );
         }
-        closeProductModal();
-        if (data && data.id) {
-          if (wasEditing) {
-            const ix = products.findIndex((x) => x.id === data.id);
-            if (ix >= 0) products[ix] = data;
-            else products.push(data);
-          } else {
-            products.unshift(data);
-          }
-          sortProductsNewestFirst();
-          render();
-        }
+        closeProductModal(true);
         toast(wasEditing ? "Product updated" : "Product added", "ok");
-        await refreshProducts({ quiet: true, silentErrors: true });
+        await refreshProducts({ showLoading: false });
       } catch (err) {
         toast(err.message || String(err), "err");
       } finally {
+        productFormSubmitting = false;
         if (saveBtn) {
           saveBtn.disabled = false;
           saveBtn.textContent = prevBtnText || "Save product";
         }
+        if (cancelBtn) cancelBtn.disabled = false;
+        if (closeBtn) closeBtn.disabled = false;
       }
     });
 
@@ -974,40 +1047,52 @@
     });
 
     $("delete-confirm").addEventListener("click", async () => {
-      if (!deleteTargetId) return;
+      if (!deleteTargetId || deleteSubmitting) return;
       const id = deleteTargetId;
       const delBtn = $("delete-confirm");
+      const delCancel = $("delete-cancel");
+      const delClose = $("delete-close");
       const prevDel = delBtn ? delBtn.textContent : "";
+      deleteSubmitting = true;
       if (delBtn) {
         delBtn.disabled = true;
         delBtn.textContent = "Deleting…";
       }
+      if (delCancel) delCancel.disabled = true;
+      if (delClose) delClose.disabled = true;
       try {
         const res = await fetch(
           base + "/admin/products/" + encodeURIComponent(id),
-          { method: "DELETE", ...fetchOpts }
+          { method: "DELETE", cache: "no-store", ...fetchOpts }
         );
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           if (res.status === 401) showLogin();
           throw new Error(data.error || res.statusText || "Delete failed");
         }
-        closeDeleteModal();
-        products = products.filter((p) => p.id !== id);
-        render();
+        closeDeleteModalForce();
         toast("Product deleted", "ok");
-        await refreshProducts({ quiet: true, silentErrors: true });
+        await refreshProducts({ showLoading: false });
       } catch (err) {
         toast(err.message || String(err), "err");
       } finally {
+        deleteSubmitting = false;
         if (delBtn) {
           delBtn.disabled = false;
           delBtn.textContent = prevDel || "Delete";
         }
+        if (delCancel) delCancel.disabled = false;
+        if (delClose) delClose.disabled = false;
       }
     });
 
-    $("search").addEventListener("input", render);
+    $("search").addEventListener("input", () => {
+      if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        searchDebounceTimer = null;
+        render();
+      }, 120);
+    });
 
     async function checkSession() {
       try {
