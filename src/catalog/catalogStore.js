@@ -74,12 +74,11 @@ export async function addProduct({ affiliateLink, title, image, price, currency 
   if (!imageStr) throw new Error("image is required");
 
   const priceStr =
-    price === undefined || price === null
+    price === undefined || price === null ? "" : String(price).trim();
+  const currencyStr =
+    currency === undefined || currency === null
       ? ""
-      : String(price).trim();
-  if (!priceStr) throw new Error("price is required");
-
-  const currencyStr = (currency ? String(currency).trim() : "MAD") || "MAD";
+      : String(currency).trim() || "";
 
   const product_id = extractProductIdFromUrl(affiliate_link);
 
@@ -114,16 +113,18 @@ export async function updateProduct(id, { affiliateLink, title, image, price, cu
   const imageStr = String(image ?? "").trim();
   if (!imageStr) throw new Error("image is required");
 
+  const prev = list[idx];
   const priceStr =
     price === undefined || price === null
-      ? ""
+      ? prev.price
       : String(price).trim();
-  if (!priceStr) throw new Error("price is required");
+  const currencyStr =
+    currency === undefined || currency === null
+      ? prev.currency
+      : String(currency).trim() || "";
 
-  const currencyStr = (currency ? String(currency).trim() : "MAD") || "MAD";
   const product_id = extractProductIdFromUrl(affiliate_link);
 
-  const prev = list[idx];
   const row = {
     ...prev,
     affiliate_link,

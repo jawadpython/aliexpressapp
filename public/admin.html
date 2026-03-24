@@ -337,7 +337,6 @@
       max-width: 280px;
       line-height: 1.35;
     }
-    .price-cell { font-variant-numeric: tabular-nums; font-weight: 600; }
     .mono {
       font-family: var(--mono);
       font-size: 0.75rem;
@@ -546,7 +545,6 @@
                 <tr>
                   <th></th>
                   <th>Product</th>
-                  <th>Price</th>
                   <th>Affiliate link</th>
                   <th>ID</th>
                   <th></th>
@@ -575,10 +573,6 @@
           <input type="text" id="f-title" required />
           <label for="f-image">Image URL</label>
           <input type="url" id="f-image" required placeholder="https://..." />
-          <label for="f-price">Price</label>
-          <input type="text" id="f-price" required placeholder="29.99" />
-          <label for="f-currency">Currency</label>
-          <input type="text" id="f-currency" value="MAD" maxlength="8" />
         </div>
         <div class="modal-foot">
           <button type="button" class="btn btn-secondary" id="modal-cancel">Cancel</button>
@@ -696,7 +690,7 @@
 
       if (list.length === 0) {
         tbody.innerHTML =
-          '<tr><td colspan="6" class="empty" style="border:none;padding:40px;">No matches for your search.</td></tr>';
+          '<tr><td colspan="5" class="empty" style="border:none;padding:40px;">No matches for your search.</td></tr>';
         return;
       }
 
@@ -715,7 +709,6 @@
           return `<tr data-id="${escapeAttr(p.id)}">
             <td>${img}</td>
             <td class="title-cell">${safeTitle}</td>
-            <td class="price-cell">${escapeHtml(p.price)} ${escapeHtml(p.currency || "")}</td>
             <td><span class="mono" title="${safeLink}">${escapeHtml(shortLink)}</span></td>
             <td><span class="mono">${pid}</span></td>
             <td class="actions">
@@ -773,8 +766,6 @@
       $("f-affiliate").value = "";
       $("f-title").value = "";
       $("f-image").value = "";
-      $("f-price").value = "";
-      $("f-currency").value = "MAD";
       $("overlay-product").classList.add("open");
       $("overlay-product").setAttribute("aria-hidden", "false");
     }
@@ -788,8 +779,6 @@
       $("f-affiliate").value = p.affiliate_link;
       $("f-title").value = p.title;
       $("f-image").value = p.image;
-      $("f-price").value = p.price;
-      $("f-currency").value = p.currency || "MAD";
       $("overlay-product").classList.add("open");
       $("overlay-product").setAttribute("aria-hidden", "false");
     }
@@ -887,8 +876,6 @@
         affiliateLink: $("f-affiliate").value.trim(),
         title: $("f-title").value.trim(),
         image: $("f-image").value.trim(),
-        price: $("f-price").value.trim(),
-        currency: $("f-currency").value.trim() || "MAD",
       };
       try {
         const url =
