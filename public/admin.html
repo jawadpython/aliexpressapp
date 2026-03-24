@@ -773,8 +773,14 @@
     $("login-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const msg = $("login-msg");
+      const submitBtn = e.submitter || $("login-form").querySelector('button[type="submit"]');
       msg.textContent = "";
       msg.className = "msg";
+      const prevLabel = submitBtn ? submitBtn.textContent : "";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Signing in…";
+      }
       try {
         const res = await fetch(base + "/admin/login", {
           method: "POST",
@@ -785,8 +791,18 @@
           }),
           ...fetchOpts,
         });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || res.statusText);
+        const raw = await res.text();
+        let data = {};
+        try {
+          data = raw ? JSON.parse(raw) : {};
+        } catch {
+          throw new Error(
+            res.status +
+              ": " +
+              (raw.slice(0, 120) || "Not JSON — check Vercel function logs / deployment.")
+          );
+        }
+        if (!res.ok) throw new Error(data.error || res.statusText || "Login failed");
         $("login-pass").value = "";
         showApp();
         await loadProducts();
@@ -794,6 +810,11 @@
       } catch (err) {
         msg.textContent = err.message || String(err);
         msg.className = "msg err";
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = prevLabel || "Sign in";
+        }
       }
     });
 

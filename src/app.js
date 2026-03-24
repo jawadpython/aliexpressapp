@@ -73,6 +73,18 @@ function parsePriceNum(s) {
 
 const app = express();
 app.set("trust proxy", 1);
+
+/**
+ * Vercel rewrites traffic to the function; `req.url` can be `/api` while the client
+ * requested `/admin/login`. Express routing uses `req.url`, so align it with `originalUrl`.
+ */
+app.use((req, _res, next) => {
+  if (req.originalUrl && req.originalUrl !== req.url) {
+    req.url = req.originalUrl;
+  }
+  next();
+});
+
 app.use(cors(corsOptions()));
 app.use(express.json());
 app.use(createSessionMiddleware());
