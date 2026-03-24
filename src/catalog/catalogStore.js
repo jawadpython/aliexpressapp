@@ -2,17 +2,24 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { extractProductIdFromUrl } from "./extractProductId.js";
-import { useRedis } from "./storageMode.js";
+import { useBlob, isVercelDeploy } from "./storageMode.js";
+import {
+  blobReadJson,
+  blobWriteJson,
+  BLOB_PATH_PRODUCTS,
+} from "./blobJson.js";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const PRODUCTS_FILE = path.join(DATA_DIR, "products.json");
-const KV_CATALOG_KEY = "catalog:products";
 
 function ensureDataDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
 function loadProductsFromFs() {
+  if (isVercelDeploy() && !useBlob()) {
+    return [];
+  }
   ensureDataDir();
   if (!fs.existsSync(PRODUCTS_FILE)) {
     fs.writeFileSync(PRODUCTS_FILE, "[]", "utf8");
@@ -28,34 +35,26 @@ function loadProductsFromFs() {
 }
 
 function saveProductsToFs(list) {
+  if (isVercelDeploy() && !useBlob()) {
+    throw new Error(
+      "Vercel Blob is not connected. In Vercel: project → Storage → Blob → create a store → Connect to this project (BLOB_READ_WRITE_TOKEN) → Redeploy."
+    );
+  }
   ensureDataDir();
   fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(list, null, 2), "utf8");
 }
 
 async function loadProductsRaw() {
-  if (useRedis()) {
-    const { Redis } = await import("@upstash/redis");
-    const redis = Redis.fromEnv();
-    const data = await redis.get(KV_CATALOG_KEY);
-    if (Array.isArray(data)) return data;
-    if (typeof data === "string") {
-      try {
-        const parsed = JSON.parse(data);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
-    }
-    return [];
+  if (useBlob()) {
+    const data = await blobReadJson(BLOB_PATH_PRODUCTS);
+    return Array.isArray(data) ? data : [];
   }
   return loadProductsFromFs();
 }
 
 async function saveProductsRaw(list) {
-  if (useRedis()) {
-    const { Redis } = await import("@upstash/redis");
-    const redis = Redis.fromEnv();
-    await redis.set(KV_CATALOG_KEY, list);
+  if (useBlob()) {
+    await blobWriteJson(BLOB_PATH_PRODUCTS, list);
     return;
   }
   saveProductsToFs(list);
@@ -154,7 +153,7 @@ export async function getById(id) {
   return list.find((p) => p.id === id) ?? null;
 }
 
-/** All products (async; Redis on Vercel, file locally). */
+/** All products (async; Vercel Blob on production, files locally). */
 export async function loadProductsList() {
   return loadProductsRaw();
 }

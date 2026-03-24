@@ -17,7 +17,12 @@ import {
   toPublicDto,
 } from "./catalog/catalogStore.js";
 import { appendClick } from "./catalog/clickLog.js";
-import { useRedis, vercelStorageHint } from "./catalog/storageMode.js";
+import {
+  useBlob,
+  vercelStorageHint,
+  isVercelDeploy,
+  needsBlobOnVercel,
+} from "./catalog/storageMode.js";
 
 const publicDir = path.join(process.cwd(), "public");
 
@@ -99,7 +104,9 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     mode: "catalog",
-    storage: useRedis() ? "upstash-redis" : "filesystem",
+    storage: useBlob() ? "vercel-blob" : "filesystem",
+    onVercel: isVercelDeploy(),
+    needsBlob: needsBlobOnVercel(),
     ...(hint ? { warning: hint } : {}),
   });
 });

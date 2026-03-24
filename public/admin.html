@@ -457,11 +457,27 @@
     }
     .toast.ok { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
     .toast.err { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+
+    .banner-warn {
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      color: #92400e;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+    .banner-warn strong { color: #78350f; }
+    .banner-warn a { color: #b45309; font-weight: 600; }
+    .banner-warn ol { margin: 8px 0 0 18px; padding: 0; }
+    .banner-warn li { margin: 4px 0; }
   </style>
 </head>
 <body>
   <div id="screen-login" class="login-wrap">
     <div class="login-card">
+      <div id="storage-banner-login" class="banner-warn hidden"></div>
       <h1>Catalog admin</h1>
       <p class="lead">Sign in to manage affiliate products and tracking links.</p>
       <form id="login-form">
@@ -501,6 +517,7 @@
       </header>
 
       <div class="main-body">
+        <div id="storage-banner-app" class="banner-warn hidden"></div>
         <div class="stats">
           <div class="stat-card">
             <div class="label">Total products</div>
@@ -621,6 +638,36 @@
     function showApp() {
       $("screen-login").classList.add("hidden");
       $("screen-app").classList.remove("hidden");
+    }
+
+    const STORAGE_BANNER_HTML =
+      "<strong>Catalog storage is not connected</strong>" +
+      "<p>On Vercel, products are saved to <strong>Vercel Blob</strong> (JSON files), not on disk.</p>" +
+      "<ol>" +
+      "<li>Open <a href=\"https://vercel.com/dashboard\" target=\"_blank\" rel=\"noopener\">Vercel</a> → select <strong>this</strong> project</li>" +
+      "<li><strong>Storage</strong> → <strong>Blob</strong> → connect your store (e.g. <code>aliexpressapp-blob</code>) to this project</li>" +
+      "<li><strong>Connect</strong> the store to this project — Vercel adds <code>BLOB_READ_WRITE_TOKEN</code></li>" +
+      "<li><strong>Deployments</strong> → ⋯ on the latest → <strong>Redeploy</strong></li>" +
+      "</ol>" +
+      "<p style=\"margin:10px 0 0;font-size:0.85rem;\">Check <code>/health</code>: <code>\"storage\":\"vercel-blob\"</code> and <code>\"needsBlob\":false</code>. Then refresh this page.</p>";
+
+    async function updateStorageBanners() {
+      try {
+        const res = await fetch(base + "/health", { credentials: "omit" });
+        const h = await res.json();
+        const show = h.needsBlob === true;
+        ["storage-banner-login", "storage-banner-app"].forEach((id) => {
+          const el = $(id);
+          if (!el) return;
+          if (show) {
+            el.classList.remove("hidden");
+            el.innerHTML = STORAGE_BANNER_HTML;
+          } else {
+            el.classList.add("hidden");
+            el.innerHTML = "";
+          }
+        });
+      } catch (_) {}
     }
 
     function filteredProducts() {
@@ -805,6 +852,7 @@
         if (!res.ok) throw new Error(data.error || res.statusText || "Login failed");
         $("login-pass").value = "";
         showApp();
+        await updateStorageBanners();
         await loadProducts();
         toast("Welcome back", "ok");
       } catch (err) {
@@ -901,6 +949,7 @@
         const data = await res.json();
         if (data.loggedIn) {
           showApp();
+          await updateStorageBanners();
           await loadProducts();
         } else {
           showLogin();
@@ -910,6 +959,7 @@
       }
     }
 
+    updateStorageBanners();
     checkSession();
   </script>
 </body>

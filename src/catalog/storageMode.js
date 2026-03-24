@@ -1,17 +1,23 @@
 /**
- * Upstash Redis (Vercel “Redis” integration) — required on Vercel; local dev uses data/*.json.
- * Env: UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN (auto-added when you connect Redis in Vercel).
+ * Vercel Blob — use when BLOB_READ_WRITE_TOKEN is set (add Blob from Vercel Storage).
+ * Local dev uses backend/data/*.json when no token.
  */
-export function useRedis() {
-  return Boolean(
-    process.env.UPSTASH_REDIS_REST_URL?.trim() &&
-      process.env.UPSTASH_REDIS_REST_TOKEN?.trim()
-  );
+export function useBlob() {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim());
+}
+
+export function isVercelDeploy() {
+  return process.env.VERCEL === "1";
+}
+
+/** True when deployed on Vercel but Blob is not connected — catalog cannot persist. */
+export function needsBlobOnVercel() {
+  return isVercelDeploy() && !useBlob();
 }
 
 export function vercelStorageHint() {
-  if (process.env.VERCEL && !useRedis()) {
-    return "Add Upstash Redis from Vercel Marketplace and link it (UPSTASH_REDIS_REST_* env vars).";
+  if (needsBlobOnVercel()) {
+    return "Connect Vercel Blob: project → Storage → Create Blob store → link to this project (BLOB_READ_WRITE_TOKEN), then Redeploy.";
   }
   return null;
 }
