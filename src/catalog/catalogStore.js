@@ -61,6 +61,36 @@ async function saveProductsRaw(list) {
 }
 
 /**
+ * @param {Array<{ id: string, affiliate_link?: string, product_id?: string | null }>} list
+ * @param {{ affiliate_link: string, product_id: string | null, excludeId?: string }} opts
+ */
+function assertNotDuplicate(list, { affiliate_link, product_id, excludeId }) {
+  const link = String(affiliate_link).trim();
+  for (const p of list) {
+    if (excludeId && p.id === excludeId) continue;
+    const plink = String(p.affiliate_link ?? "").trim();
+    if (plink === link) {
+      const err = new Error(
+        "This affiliate link is already in the catalog."
+      );
+      err.code = "DUPLICATE";
+      throw err;
+    }
+    if (
+      product_id &&
+      p.product_id != null &&
+      String(p.product_id) === String(product_id)
+    ) {
+      const err = new Error(
+        "This AliExpress product is already listed (same item as another entry)."
+      );
+      err.code = "DUPLICATE";
+      throw err;
+    }
+  }
+}
+
+/**
  * Store affiliate link exactly as provided (only trims surrounding whitespace).
  */
 export async function addProduct({ affiliateLink, title, image, price, currency }) {
@@ -82,6 +112,9 @@ export async function addProduct({ affiliateLink, title, image, price, currency 
 
   const product_id = extractProductIdFromUrl(affiliate_link);
 
+  const list = await loadProductsRaw();
+  assertNotDuplicate(list, { affiliate_link, product_id });
+
   const row = {
     id: crypto.randomUUID(),
     affiliate_link,
@@ -93,7 +126,6 @@ export async function addProduct({ affiliateLink, title, image, price, currency 
     createdAt: new Date().toISOString(),
   };
 
-  const list = await loadProductsRaw();
   list.push(row);
   await saveProductsRaw(list);
   return row;
@@ -124,6 +156,8 @@ export async function updateProduct(id, { affiliateLink, title, image, price, cu
       : String(currency).trim() || "";
 
   const product_id = extractProductIdFromUrl(affiliate_link);
+
+  assertNotDuplicate(list, { affiliate_link, product_id, excludeId: id });
 
   const row = {
     ...prev,

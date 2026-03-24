@@ -111,6 +111,12 @@
       color: #fff;
       margin-top: 8px;
     }
+    .btn-primary:disabled,
+    .btn-secondary:disabled,
+    .btn-danger:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
     .btn-primary:hover { background: var(--accent-hover); }
     .btn-secondary {
       background: var(--surface);
@@ -296,6 +302,11 @@
       border-radius: 12px;
       box-shadow: var(--shadow);
       overflow: hidden;
+      transition: opacity 0.18s ease;
+    }
+    .panel.refreshing {
+      opacity: 0.65;
+      pointer-events: none;
     }
 
     .table-wrap { overflow-x: auto; }
@@ -534,7 +545,7 @@
           </div>
         </div>
 
-        <div class="panel">
+        <div class="panel" id="catalog-panel">
           <div id="empty-state" class="empty hidden">
             <strong>No products yet</strong>
             Add your first affiliate link with the button above.
@@ -667,7 +678,11 @@
     function filteredProducts() {
       const q = $("search").value.trim().toLowerCase();
       if (!q) return products.slice();
-      return products.filter((p) => p.title.toLowerCase().includes(q));
+      return products.filter((p) =>
+        String(p.title || "")
+          .toLowerCase()
+          .includes(q)
+      );
     }
 
     function render() {
@@ -740,23 +755,48 @@
         .replace(/>/g, "&gt;");
     }
 
-    async function loadProducts() {
+    function sortProductsNewestFirst() {
+      products.sort(
+        (a, b) =>
+          new Date(b.createdAt || b.updatedAt || 0) -
+          new Date(a.createdAt || a.updatedAt || 0)
+      );
+    }
+
+    /**
+     * Reload catalog from server (cache-busted so new items always appear after CRUD).
+     * @param {{ quiet?: boolean, silentErrors?: boolean }} opts — quiet: no dimming; silentErrors: no toast (after successful local update)
+     */
+    async function refreshProducts(opts) {
+      const quiet = opts && opts.quiet;
+      const silentErrors = opts && opts.silentErrors;
+      const panel = $("catalog-panel");
+      if (!quiet && panel) panel.classList.add("refreshing");
       try {
-        const res = await fetch(base + "/admin/products", fetchOpts);
+        const res = await fetch(
+          base + "/admin/products?_=" + encodeURIComponent(String(Date.now())),
+          fetchOpts
+        );
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          if (res.status === 401) showLogin();
+          if (res.status === 401) {
+            showLogin();
+            return;
+          }
           throw new Error(data.error || res.statusText);
         }
-        products = data.products || [];
-        products.sort(
-          (a, b) =>
-            new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-        );
+        products = Array.isArray(data.products) ? data.products : [];
+        sortProductsNewestFirst();
         render();
       } catch (e) {
-        toast(e.message || String(e), "err");
+        if (!silentErrors) toast(e.message || String(e), "err");
+      } finally {
+        if (panel) panel.classList.remove("refreshing");
       }
+    }
+
+    async function loadProducts() {
+      await refreshProducts();
     }
 
     function openCreate() {
@@ -872,18 +912,26 @@
 
     $("product-form").addEventListener("submit", async (e) => {
       e.preventDefault();
+      const saveBtn = $("modal-save");
+      const wasEditing = editingId != null;
+      const currentEditId = editingId;
       const body = {
         affiliateLink: $("f-affiliate").value.trim(),
         title: $("f-title").value.trim(),
         image: $("f-image").value.trim(),
       };
+      const prevBtnText = saveBtn ? saveBtn.textContent : "";
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = wasEditing ? "Saving…" : "Creating…";
+      }
       try {
         const url =
-          editingId == null
+          currentEditId == null
             ? base + "/admin/products"
-            : base + "/admin/products/" + encodeURIComponent(editingId);
+            : base + "/admin/products/" + encodeURIComponent(currentEditId);
         const res = await fetch(url, {
-          method: editingId == null ? "POST" : "PUT",
+          method: currentEditId == null ? "POST" : "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
           ...fetchOpts,
@@ -891,13 +939,31 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           if (res.status === 401) showLogin();
-          throw new Error(data.error || res.statusText);
+          throw new Error(
+            data.error || res.statusText || "Request failed"
+          );
         }
         closeProductModal();
-        toast(editingId ? "Product updated" : "Product created", "ok");
-        await loadProducts();
+        if (data && data.id) {
+          if (wasEditing) {
+            const ix = products.findIndex((x) => x.id === data.id);
+            if (ix >= 0) products[ix] = data;
+            else products.push(data);
+          } else {
+            products.unshift(data);
+          }
+          sortProductsNewestFirst();
+          render();
+        }
+        toast(wasEditing ? "Product updated" : "Product added", "ok");
+        await refreshProducts({ quiet: true, silentErrors: true });
       } catch (err) {
         toast(err.message || String(err), "err");
+      } finally {
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = prevBtnText || "Save product";
+        }
       }
     });
 
@@ -910,6 +976,12 @@
     $("delete-confirm").addEventListener("click", async () => {
       if (!deleteTargetId) return;
       const id = deleteTargetId;
+      const delBtn = $("delete-confirm");
+      const prevDel = delBtn ? delBtn.textContent : "";
+      if (delBtn) {
+        delBtn.disabled = true;
+        delBtn.textContent = "Deleting…";
+      }
       try {
         const res = await fetch(
           base + "/admin/products/" + encodeURIComponent(id),
@@ -918,13 +990,20 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           if (res.status === 401) showLogin();
-          throw new Error(data.error || res.statusText);
+          throw new Error(data.error || res.statusText || "Delete failed");
         }
         closeDeleteModal();
+        products = products.filter((p) => p.id !== id);
+        render();
         toast("Product deleted", "ok");
-        await loadProducts();
+        await refreshProducts({ quiet: true, silentErrors: true });
       } catch (err) {
         toast(err.message || String(err), "err");
+      } finally {
+        if (delBtn) {
+          delBtn.disabled = false;
+          delBtn.textContent = prevDel || "Delete";
+        }
       }
     });
 

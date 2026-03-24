@@ -246,7 +246,8 @@ app.post("/admin/products", requireAdmin, async (req, res) => {
     return res.status(201).json(row);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Bad request";
-    return res.status(400).json({ error: message });
+    const dup = e && typeof e === "object" && e.code === "DUPLICATE";
+    return res.status(dup ? 409 : 400).json({ error: message });
   }
 });
 
@@ -270,7 +271,8 @@ app.put("/admin/products/:id", requireAdmin, async (req, res) => {
     return res.json(row);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Bad request";
-    return res.status(400).json({ error: message });
+    const dup = e && typeof e === "object" && e.code === "DUPLICATE";
+    return res.status(dup ? 409 : 400).json({ error: message });
   }
 });
 
