@@ -787,6 +787,41 @@
       );
     }
 
+    /** Apply row from POST/PUT so the table updates immediately (no slow second round-trip required). */
+    function mergeProductRow(row) {
+      if (!row || !row.id) return;
+      const ix = products.findIndex((p) => p.id === row.id);
+      if (ix >= 0) {
+        products[ix] = row;
+      } else {
+        products.unshift(row);
+      }
+      sortProductsNewestFirst();
+      render();
+    }
+
+    function fetchJsonWithTimeout(url, options, timeoutMs) {
+      const ms = timeoutMs || 90000;
+      const ctrl = new AbortController();
+      const tid = setTimeout(function () {
+        ctrl.abort();
+      }, ms);
+      return fetch(url, { ...options, signal: ctrl.signal })
+        .then(function (res) {
+          clearTimeout(tid);
+          return res;
+        })
+        .catch(function (e) {
+          clearTimeout(tid);
+          if (e && e.name === "AbortError") {
+            throw new Error(
+              "Request timed out — try again (server may be waking up)."
+            );
+          }
+          throw e;
+        });
+    }
+
     function setListLoading(on, label) {
       const status = $("list-status");
       const panel = $("catalog-panel");
@@ -808,32 +843,107 @@
     }
 
     /**
-     * @param {{ showLoading?: boolean }} opts — showLoading: spinner + light overlay (initial load / login). Off after saves for a snappier UI.
+     * Load catalog from server.
+     * @param {{ showLoading?: boolean, soft?: boolean, expectedId?: string|null }} opts
+     *   — soft: after save/delete; does not fight the race guard; retries for Blob read lag.
      */
     async function refreshProducts(opts) {
-      const showLoading = opts && opts.showLoading === true;
-      const gen = ++loadGeneration;
+      opts = opts || {};
+      var showLoading = opts.showLoading === true;
+      var soft = opts.soft === true;
+      var expectedId = opts.expectedId != null ? opts.expectedId : null;
+      var maxAttempts = soft ? 4 : 1;
+
+      if (!soft) {
+        loadGeneration++;
+      }
+      var gen = loadGeneration;
+
       if (showLoading) setListLoading(true, "Loading catalog…");
+
       try {
-        const res = await fetch(
-          base + "/admin/products?_=" + encodeURIComponent(String(Date.now())),
-          { ...fetchOpts, cache: "no-store" }
-        );
-        if (gen !== loadGeneration) return;
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          if (res.status === 401) {
-            showLogin();
-            return;
+        for (var attempt = 0; attempt < maxAttempts; attempt++) {
+          if (!soft && gen !== loadGeneration) return;
+
+          var res;
+          try {
+            res = await fetchJsonWithTimeout(
+              base +
+                "/admin/products?_=" +
+                encodeURIComponent(String(Date.now())) +
+                "&a=" +
+                attempt,
+              { ...fetchOpts, cache: "no-store" },
+              90000
+            );
+          } catch (err) {
+            if (soft && attempt < maxAttempts - 1) {
+              await new Promise(function (r) {
+                setTimeout(r, 300 * (attempt + 1));
+              });
+              continue;
+            }
+            throw err;
           }
-          throw new Error(data.error || res.statusText || "Failed to load products");
+
+          if (!soft && gen !== loadGeneration) return;
+
+          var data = await res.json().catch(function () {
+            return {};
+          });
+          if (!res.ok) {
+            if (res.status === 401) {
+              showLogin();
+              return;
+            }
+            if (soft && attempt < maxAttempts - 1) {
+              await new Promise(function (r) {
+                setTimeout(r, 300 * (attempt + 1));
+              });
+              continue;
+            }
+            throw new Error(
+              data.error || res.statusText || "Failed to load products"
+            );
+          }
+
+          var next = Array.isArray(data.products) ? data.products : [];
+
+          if (soft && expectedId) {
+            var has = next.some(function (p) {
+              return p.id === expectedId;
+            });
+            if (!has && attempt < maxAttempts - 1) {
+              await new Promise(function (r) {
+                setTimeout(r, 400 * (attempt + 1));
+              });
+              continue;
+            }
+            if (!has) {
+              var keep = products.find(function (p) {
+                return p.id === expectedId;
+              });
+              if (keep) {
+                next = [keep].concat(
+                  next.filter(function (p) {
+                    return p.id !== expectedId;
+                  })
+                );
+              }
+            }
+          }
+
+          if (!soft && gen !== loadGeneration) return;
+
+          products = next;
+          sortProductsNewestFirst();
+          render();
+          return;
         }
-        if (gen !== loadGeneration) return;
-        products = Array.isArray(data.products) ? data.products : [];
-        sortProductsNewestFirst();
-        render();
       } catch (e) {
-        if (gen === loadGeneration) toast(e.message || String(e), "err");
+        if (!soft && gen === loadGeneration) {
+          toast(e.message || String(e), "err");
+        }
       } finally {
         if (gen === loadGeneration && showLoading) setListLoading(false);
       }
@@ -1010,13 +1120,17 @@
           currentEditId == null
             ? base + "/admin/products"
             : base + "/admin/products/" + encodeURIComponent(currentEditId);
-        const res = await fetch(url, {
-          method: currentEditId == null ? "POST" : "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          cache: "no-store",
-          ...fetchOpts,
-        });
+        const res = await fetchJsonWithTimeout(
+          url,
+          {
+            method: currentEditId == null ? "POST" : "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            cache: "no-store",
+            ...fetchOpts,
+          },
+          90000
+        );
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           if (res.status === 401) showLogin();
@@ -1024,9 +1138,13 @@
             data.error || res.statusText || "Request failed"
           );
         }
+        mergeProductRow(data);
         closeProductModal(true);
         toast(wasEditing ? "Product updated" : "Product added", "ok");
-        await refreshProducts({ showLoading: false });
+        void refreshProducts({
+          soft: true,
+          expectedId: data.id || null,
+        });
       } catch (err) {
         toast(err.message || String(err), "err");
       } finally {
@@ -1061,18 +1179,23 @@
       if (delCancel) delCancel.disabled = true;
       if (delClose) delClose.disabled = true;
       try {
-        const res = await fetch(
+        const res = await fetchJsonWithTimeout(
           base + "/admin/products/" + encodeURIComponent(id),
-          { method: "DELETE", cache: "no-store", ...fetchOpts }
+          { method: "DELETE", cache: "no-store", ...fetchOpts },
+          90000
         );
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           if (res.status === 401) showLogin();
           throw new Error(data.error || res.statusText || "Delete failed");
         }
+        products = products.filter(function (p) {
+          return p.id !== id;
+        });
+        render();
         closeDeleteModalForce();
         toast("Product deleted", "ok");
-        await refreshProducts({ showLoading: false });
+        void refreshProducts({ soft: true });
       } catch (err) {
         toast(err.message || String(err), "err");
       } finally {
